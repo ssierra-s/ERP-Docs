@@ -1,78 +1,108 @@
 import uuid
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
+
 
 class Company(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=200)
-    created_at = models.DateTimeField(auto_now_add=True)
+    legal_name = models.CharField(max_length=255, default="Sin nombre legal")
+    created_at = models.DateTimeField(default=timezone.now)
 
-    def __str__(self):
-        return self.name
-    
-class CompanyUser(models.Model):
-    """Asocia usuarios a empresas para control de acceso."""
+
+class CompanyMembership(models.Model):
+    """
+    Asocia usuarios a compañías y, opcionalmente, define su nivel de aprobación 1–3.
+    """
+    APPROVAL_LEVELS = [(1, "L1"), (2, "L2"), (3, "L3")]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='members')
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    role = models.CharField(max_length=50, blank=True)
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name="memberships")
+    user = models.ForeignKey( 
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="company_memberships"
+    )
+    name = models.CharField(max_length=255, default="Pepe Perez")
+    approval_level = models.PositiveSmallIntegerField(choices=APPROVAL_LEVELS, null=True, blank=True)
+
     class Meta:
-        unique_together = ('company', 'user')
+        unique_together = ("company", "user")
 
 
-# Entidad genérica referenciable (vehicle, employee, etc.)
-class DomainEntity(models.Model):
+class EntityRef(models.Model):
+    """
+    Entidad genérica (vehículo, empleado, etc.) por referencia.
+    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    company = models.ForeignKey(Company, on_delete=models.CASCADE)
-    entity_type = models.CharField(max_length=50) # p. ej. 'vehicle', 'employee'
-    external_id = models.UUIDField() # id de la entidad en su módulo
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name="entities")
+    entity_type = models.CharField(max_length=64)  # p.ej. "vehicle", "employee"
+    external_id = models.UUIDField()               # 👈 añadido porque estaba en unique_together
+    created_at = models.DateTimeField(default=timezone.now)
+
     class Meta:
-        unique_together = ('company', 'entity_type', 'external_id')
+        unique_together = ("company", "entity_type", "external_id")
+
 
 class Document(models.Model):
-    STATUS_CHOICES = (
-        ('P', 'Pendiente'),
-        ('A', 'Aprobado'),
-        ('R', 'Rechazado'),
-    )
+    VALIDATION_STATUS = [
+        ("P", "Pendiente"),
+        ("A", "Aprobado"),
+        ("R", "Rechazado"),
+    ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name='documents')
-    entity = models.ForeignKey(DomainEntity, on_delete=models.PROTECT, related_name='documents')
-
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name="documents")
+    entity = models.ForeignKey(EntityRef, on_delete=models.CASCADE, related_name="documents")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="documents_created"
+    )
     name = models.CharField(max_length=255)
-    mime_type = models.CharField(max_length=100)
+    mime_type = models.CharField(max_length=128)
     size_bytes = models.BigIntegerField()
-    bucket_key = models.CharField(max_length=1024)
-    content_hash = models.CharField(max_length=128, blank=True)  # opcional
-
-    validation_status = models.CharField(max_length=1, choices=STATUS_CHOICES, null=True, blank=True)
-
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_documents')
-    created_at = models.DateTimeField(auto_now_add=True)
+    bucket_key = models.CharField(max_length=1024)  # ruta o UUID asignado
+    sha256 = models.CharField(max_length=64, null=True, blank=True)
+    validation_status = models.CharField(max_length=1, choices=VALIDATION_STATUS, null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return f"{self.name} ({self.id})"
+
+class ValidationFlow(models.Model):
+    """
+    Flujo por documento. Si existe, el documento inicia en P.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    document = models.OneToOneField(Document, on_delete=models.CASCADE, related_name="validation_flow")
+    created_at = models.DateTimeField(default=timezone.now)
+
 
 class ValidationStep(models.Model):
+    """
+    order más alto = mayor jerarquía.
+    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='steps')
-    order = models.PositiveIntegerField()  # mayor = mayor jerarquía
-    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='approval_steps')
-    status = models.CharField(max_length=1, choices=Document.STATUS_CHOICES, default='P')
-    acted_at = models.DateTimeField(null=True, blank=True)
+    flow = models.ForeignKey(ValidationFlow, on_delete=models.CASCADE, related_name="steps")
+    order = models.PositiveSmallIntegerField()
+    approver = models.ForeignKey(CompanyMembership, on_delete=models.PROTECT, related_name="approval_steps")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        unique_together = ('document', 'order')
-        ordering = ['order']
+        ordering = ["order"]
+        unique_together = ("flow", "order")
 
 
 class ValidationAction(models.Model):
+    """
+    Bitácora de acciones: aprobar/rechazar con reason.
+    """
+    ACTIONS = [("approve", "approve"), ("reject", "reject")]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='actions')
-    step = models.ForeignKey(ValidationStep, on_delete=models.SET_NULL, null=True, blank=True)
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="actions")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
-    action = models.CharField(max_length=10)  # 'approve' | 'reject' | 'auto-approve'
-    reason = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    action = models.CharField(max_length=16, choices=ACTIONS)
+    reason = models.TextField(null=True, blank=True)
+    at = models.DateTimeField(default=timezone.now)

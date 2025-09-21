@@ -1,168 +1,115 @@
 from django.db import transaction
 from django.utils import timezone
-from .models import Document, ValidationStep, ValidationAction, DomainEntity
-from django.contrib.auth import get_user_model
-from django.contrib.auth.models import User
-
-import os, uuid
-import boto3
-from botocore.client import Config
-
-# Cliente para MinIO o S3
-class S3Client:
-    def __init__(self):
-        self.bucket = os.getenv('AWS_S3_BUCKET')  # Nombre del bucket
-        self.region = os.getenv('AWS_REGION', 'us-east-1')
-        self.expires = int(os.getenv('AWS_PRESIGN_EXPIRE_SECONDS', '600'))  # Tiempo de expiración en segundos
-
-        # Crear sesión y cliente boto3 para MinIO o AWS S3
-        session = boto3.session.Session(
-            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-            region_name=self.region
-        )
-        
-        # Cliente para la conexión con MinIO o S3
-        self.client = session.client('s3', endpoint_url=os.getenv('AWS_ENDPOINT_URL'),
-                                     config=Config(signature_version='s3v4'))
-
-    def presign_put(self, key: str, mime: str, size: int) -> str:
-        """Genera una URL pre-firmada para la subida (PUT) de un archivo al bucket"""
-        return self.client.generate_presigned_url(
-            ClientMethod='put_object',
-            Params={'Bucket': self.bucket, 'Key': key, 'ContentType': mime},
-            ExpiresIn=self.expires,
-            HttpMethod='PUT'
-        )
-    
-    def presign_get(self, key: str) -> str:
-        """Genera una URL pre-firmada para la descarga (GET) de un archivo"""
-        return self.client.generate_presigned_url(
-            ClientMethod='get_object',
-            Params={'Bucket': self.bucket, 'Key': key},
-            ExpiresIn=self.expires
-        )
+from .models import Document, ValidationFlow, ValidationStep, ValidationAction, CompanyMembership
 
 
-# Función para crear un documento y asignar un flujo de validación
-def create_document_with_optional_flow(creator, company_id, entity_type, entity_id, doc_payload, flow_payload=None):
+def can_act_on_document(user, document: Document) -> bool:
+    # Seguridad mínima: el usuario debe pertenecer a la empresa del documento
+    return CompanyMembership.objects.filter(company=document.company, user=user).exists()
+
+
+@transaction.atomic
+def create_document_with_optional_flow(*, creator, company, entity, doc_payload, flow_payload=None) -> Document:
     """
-    Crea un documento en la base de datos y opcionalmente agrega un flujo de validación.
-    
-    :param creator: El usuario que está creando el documento (puede ser None si no es necesario).
-    :param company_id: El ID de la empresa asociada.
-    :param entity_type: El tipo de entidad asociada (por ejemplo, 'vehicle', 'employee', etc.)
-    :param entity_id: El ID de la entidad asociada.
-    :param doc_payload: Los metadatos del documento (nombre, tipo MIME, etc.).
-    :param flow_payload: Los pasos del flujo de validación (si se proporcionan).
-    :return: El documento creado.
+    doc_payload: dict(name, mime_type, size_bytes, bucket_key, sha256?)
+    flow_payload: dict(enabled: bool, steps: [{order, approver_user_id}, ...])
     """
-    # Si no se pasa un creador, asignamos un "usuario anónimo" predeterminado
-    if creator is None:
-        creator = User.objects.first()  # Asume que tienes al menos un usuario en tu DB
-        if not creator:
-            # Si no hay usuarios en la base de datos, asignamos un valor predeterminado (crea un usuario ficticio si es necesario)
-            creator = User.objects.create(username="anonymous_user", password="anonymous_password")
+    doc = Document.objects.create(
+        company=company,
+        entity=entity,
+        created_by=creator,
+        name=doc_payload["name"],
+        mime_type=doc_payload["mime_type"],
+        size_bytes=doc_payload["size_bytes"],
+        bucket_key=doc_payload["bucket_key"],
+        sha256=doc_payload.get("sha256"),
+        validation_status=None,
+    )
+    if flow_payload and flow_payload.get("enabled"):
+        flow = ValidationFlow.objects.create(document=doc)
+        for step in flow_payload.get("steps", []):
+            membership = CompanyMembership.objects.get(company=company, user_id=step["approver_user_id"])
+            ValidationStep.objects.create(flow=flow, order=step["order"], approver=membership)
+        # Si hay pasos, estado inicial = P
+        if flow.steps.exists():
+            doc.validation_status = "P"
+            doc.save(update_fields=["validation_status"])
+    return doc
 
-    with transaction.atomic():
-        # Crear la entidad (si no existe) o obtenerla
-        entity, created = DomainEntity.objects.get_or_create(
-            company_id=company_id,
-            entity_type=entity_type,
-            external_id=entity_id
-        )
 
-        # Crear el documento
-        document = Document.objects.create(
-            company_id=company_id,
-            entity=entity,  # Asignamos la relación con la entidad
-            name=doc_payload['name'],
-            mime_type=doc_payload['mime_type'],
-            size_bytes=doc_payload['size_bytes'],
-            bucket_key=doc_payload['bucket_key'],
-            content_hash=doc_payload.get('content_hash', ''),
-            validation_status='P',  # Inicialmente, el estado es Pendiente
-            created_by=creator,  # Asignamos el creador
-        )
-        
-        # Si hay un flujo de validación, lo agregamos
-        if flow_payload:
-            for step in flow_payload['steps']:
-                # Convertir el 'approver_user_id' a UUID
-                approver_user_id = uuid.UUID(step['approver_user_id'])  # Asegúrate de que sea un UUID válido
+def _highest_order(flow: ValidationFlow) -> int:
+    return flow.steps.order_by("order").last().order
 
-                # Obtener la instancia de User usando el UUID
-                approver = get_user_model().objects.get(id=approver_user_id)
 
-                # Crear el paso de validación
-                ValidationStep.objects.create(
-                    document=document,
-                    order=step['order'],
-                    approver=approver,  # Pasamos la instancia de User
-                    status='P',  # Todos los pasos empiezan como Pendientes
-                )
-        
+@transaction.atomic
+def approve_document(*, document: Document, actor_user, reason: str | None = None):
+    if not can_act_on_document(actor_user, document):
+        raise PermissionError("Sin acceso a la empresa del documento.")
+
+    flow = getattr(document, "validation_flow", None)
+    if not flow:
+        # No hay validación; nada que hacer
         return document
 
-# Función para rechazar un documento
-def reject_document(*, document, actor, reason=""):
-    """
-    Marca un documento como rechazado, actualizando todos los pasos de validación asociados.
-    
-    :param document: El documento que será rechazado.
-    :param actor: El usuario que realiza el rechazo.
-    :param reason: La razón del rechazo (opcional).
-    :return: El documento actualizado con el estado de rechazo.
-    """
-    # Obtén los pasos de validación asociados al documento
-    steps = list(document.steps.all())
+    # Encontrar el step del actor (puede haber uno por documento)
+    try:
+        actor_membership = CompanyMembership.objects.get(company=document.company, user=actor_user)
+    except CompanyMembership.DoesNotExist:
+        raise PermissionError("Usuario no pertenece a la empresa.")
 
-    # Verifica si el actor tiene permisos para rechazar este documento
-    if not any(st.approver_id == actor.id for st in steps):
-        raise PermissionError('El usuario no está autorizado para rechazar este documento.')
+    actor_step = flow.steps.select_for_update().filter(approver=actor_membership).first()
+    if not actor_step:
+        raise PermissionError("Usuario no es aprobador de este documento.")
 
-    # Marcar como rechazado el paso del actor
-    actor_steps = [st for st in steps if st.approver_id == actor.id]
-    for st in actor_steps:
-        st.status = 'R'
-        st.acted_at = timezone.now()
-        st.save()
+    if document.validation_status == "R" or document.validation_status == "A":
+        return document  # terminal o ya aprobado
 
-    # Registrar la acción de rechazo
-    ValidationAction.objects.create(document=document, actor=actor, action='reject', reason=reason)
+    # Marcar todos los pasos con order <= actor_step.order como aprobados
+    now = timezone.now()
+    flow.steps.filter(approved_at__isnull=True, rejected_at__isnull=True, order__lte=actor_step.order)\
+        .update(approved_at=now)
 
-    # Marcar el documento como rechazado y bloquear nuevas acciones
-    document.validation_status = 'R'
-    document.save()
+    ValidationAction.objects.create(document=document, actor=actor_user, action="approve", reason=reason)
+
+    # Si actor es el de mayor jerarquía (order más alto), documento = Aprobado
+    if actor_step.order == _highest_order(flow):
+        document.validation_status = "A"
+        document.save(update_fields=["validation_status"])
+    else:
+        # Si aún quedan pasos posteriores sin aprobar, mantener en P
+        document.validation_status = "P"
+        document.save(update_fields=["validation_status"])
 
     return document
 
-# Función para aprobar un documento
-def approve_document(*, document, actor, reason=""):
-    steps = list(document.steps.select_related('approver').order_by('order'))
 
-    # Verificamos si el actor tiene permisos para aprobar el documento
-    actor_steps = [st for st in steps if st.approver_id == actor.id]
-    if not actor_steps:
-        raise PermissionError('El usuario no está autorizado para aprobar este documento.')
+@transaction.atomic
+def reject_document(*, document: Document, actor_user, reason: str | None = None):
+    if not can_act_on_document(actor_user, document):
+        raise PermissionError("Sin acceso a la empresa del documento.")
 
-    # Aprobar el paso de mayor jerarquía
-    actor_step = sorted(actor_steps, key=lambda s: s.order)[-1]
-    actor_step.status = 'A'
-    actor_step.acted_at = timezone.now()
-    actor_step.save()
+    flow = getattr(document, "validation_flow", None)
+    if not flow:
+        return document
 
-    # Aprobar los pasos anteriores si es el de mayor jerarquía
-    for st in steps:
-        if st.order < actor_step.order and st.status == 'P':
-            st.status = 'A'
-            st.acted_at = timezone.now()
-            st.save()
+    try:
+        actor_membership = CompanyMembership.objects.get(company=document.company, user=actor_user)
+    except CompanyMembership.DoesNotExist:
+        raise PermissionError("Usuario no pertenece a la empresa.")
 
-    # Si el actor aprobó el último paso, actualizar el estado del documento a Aprobado
-    highest_order = max(s.order for s in steps)
-    if actor_step.order == highest_order and all(s.status == 'A' for s in steps):
-        document.validation_status = 'A'
-        document.save()
+    actor_step = flow.steps.select_for_update().filter(approver=actor_membership).first()
+    if not actor_step:
+        raise PermissionError("Usuario no es aprobador de este documento.")
 
+    if document.validation_status == "A" or document.validation_status == "R":
+        return document
+
+    actor_step.rejected_at = timezone.now()
+    actor_step.save(update_fields=["rejected_at"])
+
+    ValidationAction.objects.create(document=document, actor=actor_user, action="reject", reason=reason)
+
+    # Rechazo es terminal
+    document.validation_status = "R"
+    document.save(update_fields=["validation_status"])
     return document

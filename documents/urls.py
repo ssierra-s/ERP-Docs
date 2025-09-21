@@ -1,9 +1,19 @@
 from django.urls import path
-from . import views
+from .views import (
+    CompanyCreateView, CompanyMembershipCreateView, EntityRefCreateView,
+    PresignUploadView, DocumentCreateView, DocumentDownloadView,
+    DocumentApproveView, DocumentRejectView,DocumentDirectUploadView,
+    
+)
 
 urlpatterns = [
-    path('documents/', views.DocumentCreateView.as_view(), name='create_document'),
-    path('documents/<uuid:document_id>/download', views.DocumentDownloadView.as_view(), name='download_document'),
-    path('documents/<uuid:document_id>/approve', views.DocumentApproveView.as_view(), name='approve_document'),
-    path('documents/<uuid:document_id>/reject', views.DocumentRejectView.as_view(), name='reject_document'),
+    path("companies/", CompanyCreateView.as_view()),
+    path("companies/members/", CompanyMembershipCreateView.as_view()),
+    path("entities/", EntityRefCreateView.as_view()),
+    path("documents/presign-upload/", PresignUploadView.as_view()),
+    path("documents/", DocumentCreateView.as_view()),
+    path("documents/<uuid:document_id>/download", DocumentDownloadView.as_view()),
+    path("documents/<uuid:document_id>/approve", DocumentApproveView.as_view()),
+    path("documents/<uuid:document_id>/reject", DocumentRejectView.as_view()),
+    path("documents/direct-upload", DocumentDirectUploadView.as_view()),
 ]

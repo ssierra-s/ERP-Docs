@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles','rest_framework', 'documents','storages',
+    "rest_framework.authtoken",
 ]
 
 MIDDLEWARE = [
@@ -88,24 +89,29 @@ DATABASES = {
 
 
 
-# Configuración de MinIO (S3 compatible)
-AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID', 'changeme')
-AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', 'changeme123')
-AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_S3_BUCKET', 'erp-docs-bucket')
-AWS_S3_REGION_NAME = os.getenv('AWS_REGION', 'us-east-1')
-AWS_S3_ENDPOINT_URL = os.getenv('AWS_ENDPOINT_URL', 'http://localhost:9000')  # Dirección de MinIO
-AWS_PRESIGN_EXPIRE_SECONDS = int(os.getenv('AWS_PRESIGN_EXPIRE_SECONDS', 3600))  # Tiempo de expiración para URLs pre-firmadas
+MINIO = {
+    "ENDPOINT_URL": os.getenv("MINIO_ENDPOINT_URL", "http://localhost:9000"),
+    "ACCESS_KEY": os.getenv("MINIO_ACCESS_KEY", 'changeme'),
+    "SECRET_KEY": os.getenv("MINIO_SECRET_KEY", 'changeme123'),
+    "BUCKET": os.getenv("MINIO_BUCKET_NAME", "erp-docs-bucket"),
+    "REGION": os.getenv("MINIO_REGION", "us-east-1"),
+    "URL_TTL": int(os.getenv("FILE_URL_TTL_SECONDS", "900")),
+}
 
 # Configuración adicional si estás utilizando `django-storages` para integrar con S3
 DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',  # Permitir acceso a todos los usuarios, sin necesidad de autenticación
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",  
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+       "rest_framework.permissions.AllowAny",
     ],
 }
+
 
 
 # Password validation
