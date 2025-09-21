@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: erpdocs
+    ports:
+      - "5432:5432"  # Para acceder a Postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: changeme
+      MINIO_ROOT_PASSWORD: changeme123
+    ports:
+      - "9000:9000"  # Para acceso al servicio de almacenamiento
+      - "9001:9001"  # Para acceso a la consola web
+    volumes:
+      - minio:/data
+
+volumes:
+  pgdata:
+  minio:
