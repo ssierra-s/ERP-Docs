@@ -1,0 +1,400 @@
+{
+	"info": {
+		"_postman_id": "b535b4a6-cff2-4dd1-9432-90f58499cb61",
+		"name": "New Collection",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "47848417"
+	},
+	"item": [
+		{
+			"name": "http://localhost:8000/api/companies/",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\"legal_name\":\"Mi Empresa SA\"}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8000/api/companies/",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"companies",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "presign-upload/",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Token 313bae24e359df4a06db8cf34a923c72ba78461f",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{ \"company_id\":\"0c61c4ef-ab01-4919-88a1-493bc30fa7ea\", \r\n\"bucket_key\":\"companies/0c61c4ef-ab01-4919-88a1-493bc30fa7ea/vehicles/eb606477-a1ff-4cd7-9acf-eed0c4b24fe1/docs/soat-2025.pdf\",\r\n        \"mime_type\":\"application/pdf\",\r\n        \"size_bytes\":123456\r\n      }",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8000/api/documents/presign-upload/",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"documents",
+						"presign-upload",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "documents/",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Token 313bae24e359df4a06db8cf34a923c72ba78461f",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"company_id\": \"0c61c4ef-ab01-4919-88a1-493bc30fa7ea\",\r\n    \"entity\": { \"entity_type\": \"vehicle\", \"entity_id\": \"eb606477-a1ff-4cd7-9acf-eed0c4b24fe1\" },\r\n    \"document\": {\r\n      \"name\": \"soat.pdf\",\r\n      \"mime_type\": \"application/pdf\",\r\n      \"size_bytes\": 123456,\r\n      \"bucket_key\": \"companies/0c61c4ef-ab01-4919-88a1-493bc30fa7ea/vehicles/eb606477-a1ff-4cd7-9acf-eed0c4b24fe1/docs/soat-2025.pdf\"\r\n    },\r\n    \"validation_flow\": {\r\n      \"enabled\": true,\r\n      \"steps\": [\r\n        { \"order\": 1, \"approver_user_id\": \"1\" },\r\n        { \"order\": 2, \"approver_user_id\": \"2\" },\r\n        { \"order\": 3, \"approver_user_id\": \"3\" }\r\n      ]\r\n    }\r\n  }",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8000/api/companies/members/",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"companies",
+						"members",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "put in bucket",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/pdf",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "file",
+					"file": {
+						"src": "/C:/Users/User/Desktop/Prueba tecnica/Manual de Ingeniería.pdf"
+					}
+				},
+				"url": {
+					"raw": "http://localhost:9000/erp-docs-bucket/companies/0c61c4ef-ab01-4919-88a1-493bc30fa7ea/vehicles/eb606477-a1ff-4cd7-9acf-eed0c4b24fe1/docs/soat-2025.pdf?AWSAccessKeyId=changeme&Signature=SG%2F%2BGqMh7izqNb5dK5JsylznSbk%3D&content-type=application%2Fpdf&Expires=1758470753",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "9000",
+					"path": [
+						"erp-docs-bucket",
+						"companies",
+						"0c61c4ef-ab01-4919-88a1-493bc30fa7ea",
+						"vehicles",
+						"eb606477-a1ff-4cd7-9acf-eed0c4b24fe1",
+						"docs",
+						"soat-2025.pdf"
+					],
+					"query": [
+						{
+							"key": "AWSAccessKeyId",
+							"value": "changeme"
+						},
+						{
+							"key": "Signature",
+							"value": "SG%2F%2BGqMh7izqNb5dK5JsylznSbk%3D"
+						},
+						{
+							"key": "content-type",
+							"value": "application%2Fpdf"
+						},
+						{
+							"key": "Expires",
+							"value": "1758470753"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "download",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Token 313bae24e359df4a06db8cf34a923c72ba78461f",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://localhost:8000/api/documents/61b3303c-ca9d-41d8-82a1-ed42468fb6a9/download",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"documents",
+						"61b3303c-ca9d-41d8-82a1-ed42468fb6a9",
+						"download"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/direct-upload",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Token 313bae24e359df4a06db8cf34a923c72ba78461f",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "company_id",
+							"value": "0c61c4ef-ab01-4919-88a1-493bc30fa7ea",
+							"type": "text"
+						},
+						{
+							"key": "entity_type",
+							"value": "vehicle",
+							"type": "text"
+						},
+						{
+							"key": "entity_id",
+							"value": "eb606477-a1ff-4cd7-9acf-eed0c4b24fe1",
+							"type": "text"
+						},
+						{
+							"key": "file",
+							"type": "file",
+							"src": "/C:/Users/User/Desktop/Proyectos/ERP-Docs/ERP-Docs/SergioSierra-CV.pdf"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:8000/api/documents/direct-upload",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"documents",
+						"direct-upload"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "members",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Token 313bae24e359df4a06db8cf34a923c72ba78461f",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "    {\r\n        \"company\": \"313bae24e359df4a06db8cf34a923c72ba78461f\",\r\n        \"user_id\": 2,\r\n        \"name\": \"Usuario L4\",\r\n        \"approval_level\": 2\r\n      }",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8000/api/companies/members/",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"companies",
+						"members",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "entities",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Token 313bae24e359df4a06db8cf34a923c72ba78461f",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{ \"company\":\"1a95e460-937d-4746-9b1b-20665266fe41\", \"entity_type\":\"personal\", \"external_id\":\"df7f8b16-5f7a-4220-b4ee-c94fe8ef74a8\" }",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8000/api/entities/",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"entities",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "approve/reject",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Token 024c98264d37efa98ff14fbd23912110834d6a99",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{ \"actor_user_id\":\"3\", \"reason\":\"Cumple requisitos.\" }",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8000/api/documents/4081ee98-dedb-4e7f-ba75-19e31a40d7c3/approve",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"documents",
+						"4081ee98-dedb-4e7f-ba75-19e31a40d7c3",
+						"approve"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
