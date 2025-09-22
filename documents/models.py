@@ -23,7 +23,7 @@ class CompanyMembership(models.Model):
         on_delete=models.CASCADE,
         related_name="company_memberships"
     )
-    name = models.CharField(max_length=255, default="Pepe Perez")
+    name = models.CharField(max_length=255)
     approval_level = models.PositiveSmallIntegerField(choices=APPROVAL_LEVELS, null=True, blank=True)
 
     class Meta:
@@ -106,3 +106,17 @@ class ValidationAction(models.Model):
     action = models.CharField(max_length=16, choices=ACTIONS)
     reason = models.TextField(null=True, blank=True)
     at = models.DateTimeField(default=timezone.now)
+
+class DocumentEvent(models.Model):
+    EVENT_TYPES = [("upload", "Upload"), ("download", "Download")]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="events")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPES)
+    at = models.DateTimeField(default=timezone.now)
+    meta = models.JSONField(default=dict, blank=True)  # opcional: IP, tamaño, headers
+
+    def __str__(self):
+        return f"{self.event_type} - {self.document.name} - {self.at}"
+

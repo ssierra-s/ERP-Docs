@@ -7,7 +7,7 @@ import json
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework import status, permissions
-from .models import Company, CompanyMembership, EntityRef, Document
+from .models import Company, CompanyMembership, EntityRef, Document, DocumentEvent
 from .serializers import (
     CompanySerializer, CompanyMembershipSerializer,
     EntityRefSerializer, DocumentCreateSerializer, DocumentOutSerializer
@@ -84,6 +84,7 @@ class DocumentCreateView(views.APIView):
             doc_payload=payload["document"],
             flow_payload=payload.get("validation_flow"),
         )
+        DocumentEvent.objects.create(document=doc, user=request.user, event_type="upload")
         return Response(DocumentOutSerializer(doc).data, status=status.HTTP_201_CREATED)
 
 
@@ -93,6 +94,7 @@ class DocumentDownloadView(views.APIView):
         # Permisos
         IsCompanyMember().has_object_permission(request, self, doc) or Response(status=403)
         url = presign_get(doc.bucket_key)
+        DocumentEvent.objects.create(document=doc, user=request.user, event_type="download")
         return Response({"download_url": url, "validation_status": doc.validation_status}, status=200)
 
 
@@ -132,21 +134,36 @@ class DocumentDirectUploadView(APIView):
 
     @transaction.atomic
     def post(self, request):
-        """
-        multipart/form-data:
-        - company_id (UUID)
-        - entity_type
-        - entity_id
-        - file (binario)
-        - validation_flow (JSON opcional, string o dict)
-        """
         company_id = request.data.get("company_id")
         entity_type = request.data.get("entity_type")
         entity_id = request.data.get("entity_id")
         file_obj = request.FILES.get("file")
         validation_flow = request.data.get("validation_flow")
+
         if not (company_id and entity_type and entity_id and file_obj):
             return Response({"detail": "Parámetros incompletos"}, status=400)
+
+        # Validaciones de archivo
+        MAX_FILE_SIZE = 30 * 1024 * 1024  # 30 MB
+        ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png"]
+
+        if file_obj.size > MAX_FILE_SIZE:
+            return Response(
+                {"detail": "El archivo excede el tamaño máximo permitido (30 MB)"},
+                status=400
+            )
+
+        if file_obj.content_type not in ALLOWED_MIME_TYPES:
+            return Response(
+                {"detail": f"Tipo de archivo no permitido: {file_obj.content_type}"},
+                status=400
+            )
+
+        if file_obj.name.lower().endswith(".exe"):
+            return Response(
+                {"detail": "Archivos .exe no están permitidos"},
+                status=400
+            )
 
         # Parsear validation_flow si viene como string
         if validation_flow and isinstance(validation_flow, str):
@@ -195,6 +212,7 @@ class DocumentDirectUploadView(APIView):
             flow_payload=validation_flow,
         )
 
+        DocumentEvent.objects.create(document=doc, user=request.user, event_type="upload")
         return Response({
             "document_id": str(doc.id),
             "bucket_key": bucket_key,

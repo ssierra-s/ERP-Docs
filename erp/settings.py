@@ -84,6 +84,7 @@ DATABASES = {
         'PASSWORD': 'adminerp2025',
         'HOST': 'aws-1-us-east-2.pooler.supabase.com',  
         'PORT': 6543,
+       
     }
 }
 
