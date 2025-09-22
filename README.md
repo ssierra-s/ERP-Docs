@@ -80,15 +80,6 @@ En el repositorio se encuentra un .json que
 #### Autenticación: todos los endpoints requieren token de usuario.
 Usa Authorization: Token <token> en los headers.
 
-```http
-Tokens ya generados, se pueden hacer más 
-
-  user1 -> 313bae24e359df4a06db8cf34a923c72ba78461f 
-  user2 -> 0742eea001c7bf1d4c3afe770c7c6941b977fddc 
-  user3 -> 024c98264d37efa98ff14fbd23912110834d6a99
-```
-
-Perfecto 🚀. Te paso tu colección convertida al formato de documentación estilo API que me pides.
 
 ---
 
